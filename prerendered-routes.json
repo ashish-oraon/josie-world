@@ -1,0 +1,13 @@
+{
+  "routes": [
+    "/expense-tracker",
+    "/expense-tracker/add-transaction",
+    "/expense-tracker/budget",
+    "/expense-tracker/transaction-list",
+    "/expense-tracker/transaction-report",
+    "/home",
+    "/login",
+    "/shopping-list",
+    "/tic-tac-toe"
+  ]
+}

@@ -1,6 +1,6 @@
 {
   "configVersion": 1,
-  "timestamp": 1756906108851,
+  "timestamp": 1767616076551,
   "index": "/index.html",
   "assetGroups": [
     {
@@ -30,6 +30,8 @@
         "ignoreVary": true
       },
       "urls": [
+        "/assets/appScriptCode",
+        "/assets/appScriptCodeBkp",
         "/assets/diet.json",
         "/assets/icons/icon-128x128.png",
         "/assets/icons/icon-144x144.png",
@@ -45,6 +47,8 @@
   ],
   "dataGroups": [],
   "hashTable": {
+    "/assets/appScriptCode": "93756bd4802c7889c4c739128df6d5be420af0c9",
+    "/assets/appScriptCodeBkp": "fb0c2a608019e0ee1204d7b339d8fee91db45c75",
     "/assets/diet.json": "5b31ed60fa6080002c0cc4a370ac4597ba47ca66",
     "/assets/icons/icon-128x128.png": "3661a1885895d57a2ab58d5bf5cbf4859b361de6",
     "/assets/icons/icon-144x144.png": "2812f2ccd7353b592f837b6c55d3db3fcca62eb4",
@@ -57,7 +61,7 @@
     "/chunk-LXGRJW73.js": "0fed93523ef0cffad47dc7d48d8cd53308b955a7",
     "/chunk-TQUJFWPU.js": "b241b6b27df6ff2e7abc0a7a07e5bc312ab97596",
     "/favicon.ico": "335cef29a190b0211283bdeffb2a71f70678222d",
-    "/index.html": "1eb6b46119937d4927046bcc8c87e911f1395c63",
+    "/index.html": "c66819dead7e07890f9955b72e07ad1cc12fd399",
     "/main-VXLY6IQL.js": "c53b14610f54a375ef22f03b7d10ebdfd5ab092a",
     "/manifest.webmanifest": "e72172f0920b8eab736fdaa89d617b4a93868b9f",
     "/polyfills-RT5I6R6G.js": "fe9f024576f21ff6314cf8f8332cde58b9a12416",

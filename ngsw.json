@@ -1,6 +1,6 @@
 {
   "configVersion": 1,
-  "timestamp": 1770891648050,
+  "timestamp": 1770906916452,
   "index": "/index.html",
   "assetGroups": [
     {
@@ -15,7 +15,7 @@
         "/chunk-RRFUMQZZ.js",
         "/favicon.ico",
         "/index.html",
-        "/main-2TVWD7EB.js",
+        "/main-5SUEKPEK.js",
         "/manifest.webmanifest",
         "/polyfills-RT5I6R6G.js",
         "/styles-SVMUTTW2.css"
@@ -63,8 +63,8 @@
     "/chunk-KQI63TC7.js": "de82125665a00e51a35b737da777a0bf625c9af9",
     "/chunk-RRFUMQZZ.js": "c0a2dface44e566a93e2119cea962d67bfdb35b0",
     "/favicon.ico": "335cef29a190b0211283bdeffb2a71f70678222d",
-    "/index.html": "973c88765c12ad7264dcc9ae3bbebd575f08f42c",
-    "/main-2TVWD7EB.js": "af09c228aa08b6bef64370a3dec599c12109b65e",
+    "/index.html": "0ccd050df2e1ae3cf0af142aa2a01b8436071ae1",
+    "/main-5SUEKPEK.js": "f34f9dafda2e410720365f0af58842bf9ff4e6ed",
     "/manifest.webmanifest": "e72172f0920b8eab736fdaa89d617b4a93868b9f",
     "/polyfills-RT5I6R6G.js": "fe9f024576f21ff6314cf8f8332cde58b9a12416",
     "/styles-SVMUTTW2.css": "f642f083c9018ccb31ffcaa2f29537b91b934f81"

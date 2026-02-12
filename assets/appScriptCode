@@ -1,0 +1,1253 @@
+function getSheetNameAccordingToMonthAndYear() {
+  const date = new Date();
+  const name = Utilities.formatDate(date, Session.getScriptTimeZone(), "MMMM-yyyy");
+
+  Logger.log("Current Month: " + name);
+  return name;
+}
+
+
+function generateToken(username, password) {
+  console.log(Utilities.base64Encode(username + ":" + password))
+  return Utilities.base64Encode(username + ":" + password);
+}
+
+function generateEncryptedPassword(password) {
+  // Generate a SHA-256 hash of the password
+  const hashedPassword = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, password);
+
+  // Convert the hash bytes to a hex string
+  let hexHash = '';
+  for (let i = 0; i < hashedPassword.length; i++) {
+    const byte = hashedPassword[i];
+    hexHash += (byte >>> 4).toString(16);
+    hexHash += (byte & 0x0F).toString(16);
+  }
+
+  return hexHash;
+}
+
+// function test() {
+//   var plainPassword = 'myPassword123';
+//   var encryptedPassword = generateEncryptedPassword(plainPassword);
+//   Logger.log('Encrypted Password: ' + encryptedPassword);
+// }
+
+function createSheetAndSelect(sheetName) {
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+
+  // Check if sheet exists
+  let sheet = spreadsheet.getSheetByName(sheetName);
+
+  if (!sheet) {
+    // Sheet doesn't exist, create it
+    sheet = spreadsheet.insertSheet(sheetName);
+    // Initialize header row for transaction sheets (not for Category, ShoppingList, Creds, or Trading Log sheets)
+    if (sheetName !== 'Category' &&
+        sheetName !== 'ShoppingList' &&
+        sheetName !== 'Creds' &&
+        sheetName !== 'TradingLog' &&
+        sheetName !== 'Exchange' &&
+        sheetName !== 'AccountOwners' &&
+        sheetName !== 'StrategyNames' &&
+        sheetName !== 'ProfitBookings' &&
+        !sheetName.includes('Creds')) {
+      sheet.appendRow(['ID', 'Amount', 'Category', 'Note', 'Date', 'Payment Method', 'Paid By', 'Type', 'Is Deleted']);
+    }
+  }
+
+  // Select the sheet
+  spreadsheet.setActiveSheet(sheet);
+}
+
+function initializeTradingLogSheets() {
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+
+  // Initialize TradingLog sheet
+  let tradingLog = spreadsheet.getSheetByName('TradingLog');
+  if (!tradingLog) {
+    tradingLog = spreadsheet.insertSheet('TradingLog');
+    tradingLog.appendRow([
+      'ID', 'List', 'Stock', 'Buy Date', 'Buy Price', 'Qty', 'Buy Value',
+      'CMP', 'Current Value', 'Gain Amount', '% Gain', 'Strategy Name',
+      'Target Price', 'Total Potential Gain', 'Remaining Gain', 'Target Value',
+      'Time Frame', 'Account Owner', 'Exchange', 'Status'
+    ]);
+  }
+
+  // Initialize Exchange sheet
+  let exchange = spreadsheet.getSheetByName('Exchange');
+  if (!exchange) {
+    exchange = spreadsheet.insertSheet('Exchange');
+    exchange.appendRow(['ID', 'Exchange Name']);
+    exchange.appendRow(['=row()', 'India']);
+    exchange.appendRow(['=row()', 'Germany']);
+    exchange.appendRow(['=row()', 'US']);
+  }
+
+  // Initialize AccountOwners sheet
+  let accountOwners = spreadsheet.getSheetByName('AccountOwners');
+  if (!accountOwners) {
+    accountOwners = spreadsheet.insertSheet('AccountOwners');
+    accountOwners.appendRow(['ID', 'Account Owner']);
+    accountOwners.appendRow(['=row()', 'Own']);
+    accountOwners.appendRow(['=row()', 'Ai']);
+    accountOwners.appendRow(['=row()', 'Aj']);
+  }
+
+  // Initialize StrategyNames sheet
+  let strategyNames = spreadsheet.getSheetByName('StrategyNames');
+  if (!strategyNames) {
+    strategyNames = spreadsheet.insertSheet('StrategyNames');
+    strategyNames.appendRow(['ID', 'Strategy Name']);
+    strategyNames.appendRow(['=row()', 'Super Strategy']);
+    strategyNames.appendRow(['=row()', 'SMA +BDC']);
+    strategyNames.appendRow(['=row()', 'Support Resistance']);
+    strategyNames.appendRow(['=row()', 'Envelop']);
+    strategyNames.appendRow(['=row()', 'Knox']);
+    strategyNames.appendRow(['=row()', '52 weeks High Low']);
+    strategyNames.appendRow(['=row()', '67 ka Funda']);
+    strategyNames.appendRow(['=row()', 'ABCD']);
+  }
+
+  // Initialize ProfitBookings sheet
+  let profitBookings = spreadsheet.getSheetByName('ProfitBookings');
+  if (!profitBookings) {
+    profitBookings = spreadsheet.insertSheet('ProfitBookings');
+    profitBookings.appendRow([
+      'ID', 'Trade ID', 'Stock', 'Sell Date', 'Sell Price', 'Quantity Sold',
+      'Buy Price', 'Buy Value', 'Sell Value', 'Profit/Loss Amount', 'Profit/Loss %',
+      'Holding Period', 'Notes', 'Account Owner', 'Exchange', 'Base Currency',
+      'EUR to INR Rate', 'USD to INR Rate', 'EUR to USD Rate',
+      'Buy Value (INR)', 'Sell Value (INR)', 'Profit/Loss Amount (INR)'
+    ]);
+  }
+}
+
+function getCurrencyExchangeRate(fromCurrency, toCurrency) {
+  // Normalize currency names
+  const from = fromCurrency.toUpperCase().trim();
+  const to = toCurrency.toUpperCase().trim();
+
+  // If same currency, return 1
+  if (from === to) {
+    return 1;
+  }
+
+  // Get exchange rate using Google Finance
+  // Use a temporary cell that's unlikely to have data (Z9999) to avoid overwriting user data
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const tempCell = spreadsheet.getRange('Z9999');
+
+  // Store original value/formula if any
+  const originalValue = tempCell.getValue();
+  const originalFormula = tempCell.getFormula();
+  const hadFormula = originalFormula !== '';
+
+  let rate = 1;
+  try {
+    let formula = '';
+    if (from === 'EUR' && to === 'INR') {
+      formula = '=GOOGLEFINANCE("CURRENCY:EURINR")';
+    } else if (from === 'EUR' && to === 'USD') {
+      formula = '=GOOGLEFINANCE("CURRENCY:EURUSD")';
+    } else if (from === 'USD' && to === 'INR') {
+      formula = '=GOOGLEFINANCE("CURRENCY:USDINR")';
+    } else if (from === 'USD' && to === 'EUR') {
+      formula = '=GOOGLEFINANCE("CURRENCY:USDEUR")';
+    } else if (from === 'INR' && to === 'EUR') {
+      formula = '=GOOGLEFINANCE("CURRENCY:INREUR")';
+    } else if (from === 'INR' && to === 'USD') {
+      formula = '=GOOGLEFINANCE("CURRENCY:INRUSD")';
+    }
+
+    if (formula) {
+      // Set formula and wait for calculation
+      tempCell.setFormula(formula);
+      SpreadsheetApp.flush(); // Force calculation
+
+      // Get the calculated value
+      const calculatedValue = tempCell.getValue();
+      rate = parseFloat(calculatedValue) || 1;
+
+      // Restore original value/formula
+      if (hadFormula) {
+        tempCell.setFormula(originalFormula);
+      } else if (originalValue !== '') {
+        tempCell.setValue(originalValue);
+      } else {
+        tempCell.clearContent();
+      }
+    }
+  } catch (error) {
+    Logger.log('Error fetching exchange rate: ' + error);
+    // Try to restore original value/formula on error
+    try {
+      if (hadFormula) {
+        tempCell.setFormula(originalFormula);
+      } else if (originalValue !== '') {
+        tempCell.setValue(originalValue);
+      } else {
+        tempCell.clearContent();
+      }
+    } catch (restoreError) {
+      Logger.log('Error restoring cell value: ' + restoreError);
+    }
+    // Return 1 if error (no conversion)
+    rate = 1;
+  }
+
+  return rate || 1;
+}
+
+function convertCurrency(amount, fromCurrency, toCurrency) {
+  if (!amount || amount === 0) return 0;
+  const rate = getCurrencyExchangeRate(fromCurrency, toCurrency);
+  return amount * rate;
+}
+
+const name = getSheetNameAccordingToMonthAndYear();
+createSheetAndSelect(name);
+// const app = SpreadsheetApp.openByUrl('https://docs.google.com/spreadsheets/d/14dbD61rTWw4EnXopoAAbP8kCQqFnI7Z7thJ3i7FUoPU/edit#gid=0');
+const spreadsheet = SpreadsheetApp.getActiveSpreadsheet()
+const transactionsSheet = spreadsheet.getSheetByName(name);
+
+// Logger.log(transactionsSheet.getDataRange().getValues());
+
+
+const categoriesSheet = spreadsheet.getSheetByName('Category');
+const shoppingListSheet = spreadsheet.getSheetByName('ShoppingList');
+const credsSheet = spreadsheet.getSheetByName('Creds');
+
+// Initialize Trading Log master data sheets if they don't exist (called after spreadsheet is defined)
+initializeTradingLogSheets();
+
+
+function doGet(e) {
+  const action = e.parameter.action;
+  const sheet = e.parameter.sheet;
+
+  let data;
+
+  switch (action) {
+    case 'readTransactions':
+      data = readTransactions();
+      break;
+    case 'readSingleTransaction':
+      const id = e.parameter.id;
+      data = readSingleTransaction(sheet, id);
+      break;
+    case 'readShoppingList':
+      data = readShoppingList();
+      break;
+    case 'readCategories':
+      data = readCategories();
+      break;
+    case 'readTradingLogs':
+      data = readTradingLogs();
+      break;
+    case 'readSingleTradingLog':
+      const tradeId = e.parameter.id;
+      data = readSingleTradingLog(tradeId);
+      break;
+    case 'readExchanges':
+      data = readExchanges();
+      break;
+    case 'readAccountOwners':
+      data = readAccountOwners();
+      break;
+    case 'readStrategyNames':
+      data = readStrategyNames();
+      break;
+    case 'readProfitBookings':
+      data = readProfitBookings();
+      break;
+    case 'readSingleProfitBooking':
+      const profitBookingId = e.parameter.id;
+      data = readSingleProfitBooking(profitBookingId);
+      break;
+    case 'readActiveTrades':
+      // Get only active trades (Status = 'Active' or 'Partial') for profit booking
+      data = readActiveTrades();
+      break;
+    default:
+      data = { error: 'Invalid action' };
+  }
+
+  return ContentService.createTextOutput(JSON.stringify(data))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function doPost(e) {
+  const data = JSON.parse(e.postData.contents);
+  const action = e.parameter.action;
+  let result; // Declare result variable
+
+  switch (action) {
+    case 'create':
+      createData(data, data.sheetName);
+      const msg = getResponseText(data.sheetName);
+      result = { message: msg };
+      break;
+    case 'login':
+      result = processLogin(data);
+      break;
+    case 'update':
+      const updatedData = updateData(data.values, data.rowIndex, data.sheetName);
+      // const updatedData = arr.map(
+      //   ([
+      //     id,
+      //     amount,
+      //     category,
+      //     note,
+      //     date,
+      //     paymentMethod,
+      //     paidBy,
+      //     type,
+      //     isDeleted,
+      //   ]) => ({
+      //     id,
+      //     amount,
+      //     category,
+      //     note,
+      //     date: new Date(date),
+      //     paymentMethod,
+      //     paidBy,
+      //     type,
+      //     isDeleted,
+      //   }))[0];
+      result = { message: 'Transaction updated successfully', data: updatedData };
+      break;
+    case 'delete':
+      const rowIndex = e.parameter.rowIndex;
+      deleteData(data.rowIndex, data.sheetName);
+      result = { message: 'Transaction deleted successfully' };
+      break;
+    case 'createTradingLog':
+      result = createTradingLog(data);
+      break;
+    case 'updateTradingLog':
+      result = updateTradingLog(data);
+      break;
+    case 'deleteTradingLog':
+      result = deleteTradingLog(data.rowIndex);
+      break;
+    case 'createProfitBooking':
+      result = createProfitBooking(data);
+      break;
+    default:
+      result = { error: 'Invalid action' };
+  }
+  return ContentService.createTextOutput(JSON.stringify(result))
+    .setMimeType(ContentService.MimeType.JSON)
+
+
+}
+getSheets = () => {
+  const currentDate = new Date();
+  Logger.log(`Executing method:testMethod`);
+  const currentYear = currentDate.getFullYear().toString();
+  const currentMonth = currentDate.getMonth();
+  const sheets = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'].map(monthName => `${monthName}-${currentYear}`);
+  return { sheets, currentMonth };
+}
+
+function parseDateFromSheet(dateValue) {
+  // Handle null/undefined/empty values
+  if (!dateValue) {
+    Logger.log('Warning: Empty date value encountered');
+    return new Date();
+  }
+
+  // Handle Date objects from Google Sheets (when stored as Date type)
+  if (dateValue instanceof Date) {
+    // Check if it's a valid date
+    if (!isNaN(dateValue.getTime())) {
+      return dateValue;
+    }
+    Logger.log('Warning: Invalid Date object encountered');
+    return new Date();
+  }
+
+  // Handle string dates in DD-MM-YYYY format (when stored as text)
+  if (typeof dateValue === 'string') {
+    // Try DD-MM-YYYY format first (e.g., "15-1-2026" or "15-01-2026")
+    if (dateValue.includes('-')) {
+      const parts = dateValue.split('-');
+      if (parts.length === 3) {
+        const day = parseInt(parts[0], 10);
+        const month = parseInt(parts[1], 10) - 1; // Month is 0-indexed in JavaScript
+        const year = parseInt(parts[2], 10);
+
+        // Validate parsed values
+        if (!isNaN(day) && !isNaN(month) && !isNaN(year) &&
+            day >= 1 && day <= 31 && month >= 0 && month <= 11 && year > 1900) {
+          const parsedDate = new Date(year, month, day);
+          Logger.log('Parsed date from DD-MM-YYYY format:', dateValue, '->', parsedDate);
+          return parsedDate;
+        }
+      }
+    }
+
+    // Try ISO format or other standard formats
+    const parsedDate = new Date(dateValue);
+    if (!isNaN(parsedDate.getTime())) {
+      Logger.log('Parsed date from string:', dateValue, '->', parsedDate);
+      return parsedDate;
+    }
+  }
+
+  // If all parsing attempts fail, log warning and return current date
+  Logger.log('Warning: Could not parse date value:', dateValue, 'Type:', typeof dateValue);
+  return new Date();
+}
+
+function readTransactions() {
+  // Add the sheet names here
+  const { sheets, currentMonth } = getSheets();
+  Logger.log('Reading transactions - Current month index:', currentMonth);
+  Logger.log('Sheets to read:', sheets.slice(0, currentMonth + 1));
+
+  let allTransactions = [];
+  for (let i = 0; i < currentMonth + 1; i++) {
+    let str = sheets[i];
+    Logger.log('Processing sheet:', str);
+    createSheetAndSelect(str);
+    const sheet = spreadsheet.getSheetByName(str);
+    if (sheet) {
+      const values = sheet.getDataRange().getValues();
+      Logger.log('Sheet ' + str + ' has ' + values.length + ' rows');
+      // Check if sheet has data beyond header row
+      if (values.length > 1) {
+        values.shift(); // Remove header row
+        Logger.log('Adding ' + values.length + ' transactions from ' + str);
+        allTransactions.push(...values);
+      } else {
+        Logger.log('Sheet ' + str + ' has no data rows (only header or empty)');
+      }
+    } else {
+      Logger.log('Sheet ' + str + ' not found');
+    }
+  }
+  const filteredTransactions = allTransactions.filter(row => row && row.length > 0); // Filter out empty or invalid rows
+
+  const payload = {
+    data: filteredTransactions.map(
+      ([
+        id,
+        amount,
+        category,
+        note,
+        date,
+        paymentMethod,
+        paidBy,
+        type,
+        isDeleted,
+      ]) => ({
+        id,
+        amount,
+        category,
+        note,
+        date: parseDateFromSheet(date),
+        paymentMethod,
+        paidBy,
+        type,
+        isDeleted,
+      })
+    ),
+    length: filteredTransactions.length
+  }
+
+  Logger.log('Read transactions payload:', payload)
+  Logger.log('Number of transactions:', payload.length)
+  return payload;
+}
+
+function readSingleTransaction(sheetName, rowIndex) {
+  const sheet = spreadsheet.getSheetByName(sheetName);
+
+  // Check if sheet exists
+  if (!sheet) {
+    Logger.log("Sheet not found: " + sheetName);
+    return { error: 'Sheet not found', data: null };
+  }
+
+  // Validate rowIndex
+  if (!rowIndex || rowIndex < 1) {
+    Logger.log("Invalid row index: " + rowIndex);
+    return { error: 'Invalid row index', data: null };
+  }
+
+  // Check if row exists
+  const lastRow = sheet.getLastRow();
+  if (rowIndex > lastRow) {
+    Logger.log("Row index " + rowIndex + " exceeds last row " + lastRow);
+    return { error: 'Row not found', data: null };
+  }
+
+  // Get the row data
+  const lastColumn = sheet.getLastColumn();
+  const dataRange = sheet.getRange(rowIndex, 1, 1, lastColumn);
+  const values = dataRange.getValues();
+
+  Logger.log("Read transaction from sheet: " + sheetName + ", row: " + rowIndex);
+  return { data: values };
+}
+
+///////////////////////////
+function readData(sheetName) {
+  const res = sheetName.getDataRange().getValues();
+  return res;
+}
+
+function readShoppingList() {
+  const res = shoppingListSheet.getDataRange().getValues();
+  return res.map(([id, name, quantity, isAdded, isDeleted]) => ({
+    id,
+    name,
+    quantity,
+    isAdded,
+    isDeleted,
+  }));
+}
+
+function readCategories() {
+  const res = categoriesSheet.getDataRange().getValues();
+  // Skip header row and map to objects
+  return res.slice(1).map(([id, name, subType, type, icon, isDeleted]) => ({
+    id,
+    name,
+    subType,
+    type,
+    icon: icon || 'category',
+    isDeleted: isDeleted === true || isDeleted === 'true'
+  }));
+}
+
+
+function createData(data, sheetName) {
+  createSheetAndSelect(sheetName);
+  const selectedSheet = spreadsheet.getSheetByName(sheetName);
+  switch (sheetName) {
+    case 'transaction':
+      selectedSheet.appendRow(["=row()", data.amount, data.category, data.note, data.date, data.paymentMethod, data.paidBy, data.type, false]);
+      break;
+    case 'shoppingList':
+      shoppingListSheet.appendRow(["=row()", data.name, data.quantity, data.isAdded, data.isDeleted]);
+      break;
+    default:
+      selectedSheet.appendRow(["=row()", data.amount, data.category, data.note, data.date, data.paymentMethod, data.paidBy, data.type, false]);
+
+  }
+}
+
+
+function updateData(data, rowIndex, sheetName) {
+  if (sheetName == 'shoppingList') {
+    return clearAndInsertData(data);
+  } else {
+    createSheetAndSelect(sheetName);
+    const selectedSheet = spreadsheet.getSheetByName(sheetName);
+    const range = selectedSheet.getRange(rowIndex, 1, 1, selectedSheet.getLastColumn());
+    range.setValues([["=row()", data.amount, data.category, data.note, data.date, data.paymentMethod, data.paidBy, data.type, 'false']])
+    return range.getValues().map(
+      ([
+        id,
+        amount,
+        category,
+        note,
+        date,
+        paymentMethod,
+        paidBy,
+        type,
+        isDeleted,
+      ]) => ({
+        id,
+        amount,
+        category,
+        note,
+        date: parseDateFromSheet(date),
+        paymentMethod,
+        paidBy,
+        type,
+        isDeleted,
+      }))[0]
+  }
+}
+
+function deleteData(rowIndex, sheetName) {
+  createSheetAndSelect(sheetName);
+  const selectedSheet = spreadsheet.getSheetByName(sheetName);
+  selectedSheet.deleteRow(rowIndex);
+}
+
+function getResponseText(sheetName) {
+  switch (sheetName) {
+    case 'transaction':
+      return 'Transaction updated successfully';
+      break;
+    case 'shoppingList':
+      return 'New item added successfully';
+      break;
+    default:
+      return 'Transaction updated successfully';
+
+  }
+
+}
+
+function processLogin(data) {
+  const { username, password } = { ...data };
+  Logger.log(generateEncryptedPassword(password));
+  const users = credsSheet.getDataRange().getValues();
+  const foundUser = users.find(user => user[0] === username);
+  if (foundUser) {
+    const [fetchedUser, fetchedPass] = foundUser;
+    if (fetchedUser === username && fetchedPass === generateEncryptedPassword(password)) {
+      const token = generateToken(username, new Date())
+      return { token, message: 'Login successful!' };
+    } else {
+      return { token: '', message: 'Username or password is incorrect, Try again!' };
+    }
+  } else {
+    return { token: '', message: 'User not found,Please sign up!' };
+  }
+
+}
+
+function handleUnauthorized(msg) {
+  const response = ContentService.createTextOutput(msg);
+  response.setStatusCode(401);
+  return response;
+}
+
+function clearAndInsertData(payload) {
+
+  Logger.log('executing clear and insert')
+  const lastRow = shoppingListSheet.getLastRow();
+
+
+  if (lastRow > 1) {
+    shoppingListSheet.getRange(2, 1, lastRow - 1, shoppingListSheet.getLastColumn()).clearContent();
+  }
+
+  const newData = payload.map(obj => ["=row()", obj.name, obj.quantity, obj.isAdded, 'false'])
+  Logger.log(newData);
+
+  // shoppingListSheet.getRange(2, 1, newData.length, newData[0].length).setValues(newData);
+
+  const range = shoppingListSheet.getRange(2, 1, newData.length, newData[0].length);
+  range.setValues(newData);
+  return range.getValues().map(
+    ([
+      id,
+      name,
+      quantity,
+      isAdded,
+      isDeleted,
+    ]) => ({
+      id,
+      name,
+      quantity,
+      isAdded,
+      isDeleted,
+    }));
+}
+
+// ==================== Trading Log Functions ====================
+
+function getCMPFormula(exchange, stockColumn) {
+  // Stock column is column C (3), CMP is column H (8)
+  // Formula references the Stock column in the same row
+  const exchangeUpper = (exchange || '').toUpperCase();
+
+  if (exchangeUpper === 'INDIA') {
+    return `=GOOGLEFINANCE("NSE:"&${stockColumn}, "PRICE")`;
+  } else if (exchangeUpper === 'GERMANY') {
+    return `=GOOGLEFINANCE("FRA:"&${stockColumn}, "PRICE")`;
+  } else if (exchangeUpper === 'US') {
+    return `=GOOGLEFINANCE("NYSE:"&${stockColumn}, "PRICE")`;
+  }
+
+  // Default: return Buy Price if exchange not recognized
+  return '';
+}
+
+function calculateTradingLogFields(trade) {
+  // This function is used for initial calculations when creating/updating
+  // Note: When CMP uses GOOGLEFINANCE formula, the sheet will calculate values automatically
+  const buyPrice = parseFloat(trade['Buy Price']) || 0;
+  const qty = parseFloat(trade.Qty) || 0;
+  const cmp = parseFloat(trade.CMP) || buyPrice; // Default to Buy Price if CMP not provided (for initial calculation)
+  const targetPrice = parseFloat(trade['Target Price']) || 0;
+  const buyDate = trade['Buy Date'] instanceof Date
+    ? trade['Buy Date']
+    : parseDateFromSheet(trade['Buy Date']);
+  const today = new Date();
+
+  // Calculate fields (used for initial display, but formulas in sheet will override)
+  const buyValue = buyPrice * qty;
+  const currentValue = cmp * qty;
+  const gainAmount = currentValue - buyValue;
+  const percentGain = buyValue !== 0 ? (gainAmount / buyValue) * 100 : 0;
+  const targetValue = targetPrice * qty;
+  const totalPotentialGain = buyPrice !== 0 ? ((targetPrice - buyPrice) / buyPrice) * 100 : 0;
+  const remainingGain = buyPrice !== 0 ? ((targetPrice - cmp) / buyPrice) * 100 : 0;
+  const timeFrame = Math.floor((today - buyDate) / (1000 * 60 * 60 * 24)); // Days
+
+  return {
+    'Buy Value': buyValue.toFixed(2),
+    'Current Value': currentValue.toFixed(2),
+    'Gain Amount': gainAmount.toFixed(2),
+    '% Gain': percentGain.toFixed(2) + '%',
+    'Target Value': targetValue.toFixed(2),
+    'Total Potential Gain': totalPotentialGain.toFixed(2) + '%',
+    'Remaining Gain': remainingGain.toFixed(2) + '%',
+    'Time Frame': timeFrame
+  };
+}
+
+function readTradingLogs() {
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = spreadsheet.getSheetByName('TradingLog');
+
+  if (!sheet) {
+    Logger.log('TradingLog sheet not found');
+    return { data: [], length: 0 };
+  }
+
+  const values = sheet.getDataRange().getValues();
+  if (values.length <= 1) {
+    return { data: [], length: 0 };
+  }
+
+  // Skip header row
+  const dataRows = values.slice(1);
+  const filteredRows = dataRows.filter(row => row && row.length > 0);
+
+  const tradingLogs = filteredRows.map(([
+    id,
+    list,
+    stock,
+    buyDate,
+    buyPrice,
+    qty,
+    buyValue,
+    cmp,
+    currentValue,
+    gainAmount,
+    percentGain,
+    strategyName,
+    targetPrice,
+    totalPotentialGain,
+    remainingGain,
+    targetValue,
+    timeFrame,
+    accountOwner,
+    exchange,
+    status
+  ]) => ({
+    id,
+    List: list || '',
+    Stock: stock || '',
+    'Buy Date': buyDate ? parseDateFromSheet(buyDate) : new Date(),
+    'Buy Price': parseFloat(buyPrice) || 0,
+    Qty: parseFloat(qty) || 0,
+    'Buy Value': buyValue || '',
+    CMP: parseFloat(cmp) || 0,
+    'Current Value': currentValue || '',
+    'Gain Amount': gainAmount || '',
+    '% Gain': percentGain || '',
+    'Strategy Name': strategyName || '',
+    'Target Price': targetPrice || '',
+    'Total Potential Gain': totalPotentialGain || '',
+    'Remaining Gain': remainingGain || '',
+    'Target Value': targetValue || '',
+    'Time Frame': parseInt(timeFrame) || 0,
+    'Account Owner': accountOwner || '',
+    Exchange: exchange || '',
+    Status: status || 'Active'
+  }));
+
+  Logger.log('Read trading logs:', tradingLogs.length);
+  return { data: tradingLogs, length: tradingLogs.length };
+}
+
+function readSingleTradingLog(rowIndex) {
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = spreadsheet.getSheetByName('TradingLog');
+
+  if (!sheet) {
+    return { error: 'TradingLog sheet not found', data: null };
+  }
+
+  if (!rowIndex || rowIndex < 2) {
+    return { error: 'Invalid row index', data: null };
+  }
+
+  const lastRow = sheet.getLastRow();
+  if (rowIndex > lastRow) {
+    return { error: 'Row not found', data: null };
+  }
+
+  const values = sheet.getRange(rowIndex, 1, 1, sheet.getLastColumn()).getValues()[0];
+
+  return {
+    data: {
+      id: values[0],
+      List: values[1] || '',
+      Stock: values[2] || '',
+      'Buy Date': parseDateFromSheet(values[3]),
+      'Buy Price': parseFloat(values[4]) || 0,
+      Qty: parseInt(values[5]) || 0,
+      'Buy Value': values[6] || '',
+      CMP: parseFloat(values[7]) || 0,
+      'Current Value': values[8] || '',
+      'Gain Amount': values[9] || '',
+      '% Gain': values[10] || '',
+      'Strategy Name': values[11] || '',
+      'Target Price': values[12] || '',
+      'Total Potential Gain': values[13] || '',
+      'Remaining Gain': values[14] || '',
+      'Target Value': values[15] || '',
+      'Time Frame': parseInt(values[16]) || 0,
+      'Account Owner': values[17] || '',
+      Exchange: values[18] || '',
+      Status: values[19] || 'Active'
+    }
+  };
+}
+
+function createTradingLog(data) {
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = spreadsheet.getSheetByName('TradingLog');
+
+  if (!sheet) {
+    initializeTradingLogSheets();
+    sheet = spreadsheet.getSheetByName('TradingLog');
+  }
+
+  // Calculate all fields
+  const calculated = calculateTradingLogFields(data);
+
+  // Format buy date
+  const buyDate = data['Buy Date'] instanceof Date
+    ? data['Buy Date']
+    : parseDateFromSheet(data['Buy Date']);
+
+  // Get the next row number
+  const nextRow = sheet.getLastRow() + 1;
+  const stockColumn = 'C' + nextRow; // Column C (Stock) in the new row
+
+  // Determine CMP value/formula
+  let cmpValue;
+  const exchange = data.Exchange || '';
+  if (data.CMP && parseFloat(data.CMP) > 0) {
+    // If CMP is provided, use it
+    cmpValue = parseFloat(data.CMP);
+  } else if (exchange) {
+    // Use formula based on exchange
+    cmpValue = getCMPFormula(exchange, stockColumn);
+  } else {
+    // Default to Buy Price
+    cmpValue = parseFloat(data['Buy Price']) || 0;
+  }
+
+  // Insert row
+  sheet.appendRow([
+    "=row()", // ID (Column A)
+    data.List || '', // Column B
+    data.Stock || '', // Column C
+    buyDate, // Column D
+    parseFloat(data['Buy Price']) || 0, // Column E
+    parseFloat(data.Qty) || 0, // Column F
+    calculated['Buy Value'], // Column G
+    cmpValue, // Column H (CMP - formula or value)
+    calculated['Current Value'], // Column I
+    calculated['Gain Amount'], // Column J
+    calculated['% Gain'], // Column K
+    data['Strategy Name'] || '', // Column L
+    parseFloat(data['Target Price']) || 0, // Column M
+    calculated['Total Potential Gain'], // Column N
+    calculated['Remaining Gain'], // Column O
+    calculated['Target Value'], // Column P
+    calculated['Time Frame'], // Column Q
+    data['Account Owner'] || '', // Column R
+    data.Exchange || '', // Column S
+    data.Status || 'Active' // Column T
+  ]);
+
+  // If CMP is a formula, set it using setFormula
+  if (typeof cmpValue === 'string' && cmpValue.startsWith('=')) {
+    sheet.getRange(nextRow, 8).setFormula(cmpValue); // Column H (8) is CMP
+  }
+
+  // Update calculated fields that depend on CMP (Current Value, Gain Amount, % Gain, Remaining Gain)
+  // These need to be recalculated after CMP is set
+  const currentValueFormula = `=H${nextRow}*F${nextRow}`; // CMP * Qty
+  const gainAmountFormula = `=I${nextRow}-G${nextRow}`; // Current Value - Buy Value
+  const percentGainFormula = `=IF(G${nextRow}<>0, (J${nextRow}/G${nextRow}), 0)`; // (Gain Amount / Buy Value) * 100
+  const remainingGainFormula = `=IF(E${nextRow}<>0, ((M${nextRow}-H${nextRow})/E${nextRow}), 0)`; // ((Target Price - CMP) / Buy Price) * 100
+
+  sheet.getRange(nextRow, 9).setFormula(currentValueFormula); // Current Value
+  sheet.getRange(nextRow, 10).setFormula(gainAmountFormula); // Gain Amount
+  sheet.getRange(nextRow, 11).setFormula(percentGainFormula); // % Gain
+  sheet.getRange(nextRow, 15).setFormula(remainingGainFormula); // Remaining Gain
+
+  return { message: 'Trading log created successfully' };
+}
+
+function updateTradingLog(data) {
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = spreadsheet.getSheetByName('TradingLog');
+
+  if (!sheet) {
+    return { error: 'TradingLog sheet not found' };
+  }
+
+  const rowIndex = data.rowIndex;
+  if (!rowIndex || rowIndex < 2) {
+    return { error: 'Invalid row index' };
+  }
+
+  // Format buy date
+  const buyDate = data['Buy Date'] instanceof Date
+    ? data['Buy Date']
+    : parseDateFromSheet(data['Buy Date']);
+
+  const stockColumn = 'C' + rowIndex; // Column C (Stock) in the row being updated
+
+  // Determine CMP value/formula
+  let cmpValue;
+  const exchange = data.Exchange || '';
+  if (data.CMP && parseFloat(data.CMP) > 0 && !isNaN(parseFloat(data.CMP))) {
+    // If CMP is provided as a number, use it
+    cmpValue = parseFloat(data.CMP);
+  } else if (exchange) {
+    // Use formula based on exchange
+    cmpValue = getCMPFormula(exchange, stockColumn);
+  } else {
+    // Default to Buy Price
+    cmpValue = parseFloat(data['Buy Price']) || 0;
+  }
+
+  // Calculate static fields
+  const buyPrice = parseFloat(data['Buy Price']) || 0;
+  const qty = parseFloat(data.Qty) || 0;
+  const buyValue = buyPrice * qty;
+  const targetPrice = parseFloat(data['Target Price']) || 0;
+  const targetValue = targetPrice * qty;
+  const totalPotentialGain = buyPrice !== 0 ? ((targetPrice - buyPrice) / buyPrice) * 100 : 0;
+  const buyDateObj = buyDate instanceof Date ? buyDate : parseDateFromSheet(buyDate);
+  const today = new Date();
+  const timeFrame = Math.floor((today - buyDateObj) / (1000 * 60 * 60 * 24));
+
+  // Update row with static values
+  sheet.getRange(rowIndex, 1).setFormula("=row()"); // ID
+  sheet.getRange(rowIndex, 2).setValue(data.List || ''); // List
+  sheet.getRange(rowIndex, 3).setValue(data.Stock || ''); // Stock
+  sheet.getRange(rowIndex, 4).setValue(buyDate); // Buy Date
+  sheet.getRange(rowIndex, 5).setValue(buyPrice); // Buy Price
+  sheet.getRange(rowIndex, 6).setValue(qty); // Qty
+  sheet.getRange(rowIndex, 7).setFormula(`=E${rowIndex}*F${rowIndex}`); // Buy Value = Buy Price * Qty
+
+  // Set CMP (formula or value)
+  if (typeof cmpValue === 'string' && cmpValue.startsWith('=')) {
+    sheet.getRange(rowIndex, 8).setFormula(cmpValue); // CMP formula
+  } else {
+    sheet.getRange(rowIndex, 8).setValue(cmpValue); // CMP value
+  }
+
+  // Set calculated formulas
+  sheet.getRange(rowIndex, 9).setFormula(`=H${rowIndex}*F${rowIndex}`); // Current Value = CMP * Qty
+  sheet.getRange(rowIndex, 10).setFormula(`=I${rowIndex}-G${rowIndex}`); // Gain Amount = Current Value - Buy Value
+  sheet.getRange(rowIndex, 11).setFormula(`=IF(G${rowIndex}<>0, (J${rowIndex}/G${rowIndex}), 0)`); // % Gain
+  sheet.getRange(rowIndex, 12).setValue(data['Strategy Name'] || ''); // Strategy Name
+  sheet.getRange(rowIndex, 13).setValue(targetPrice); // Target Price
+  sheet.getRange(rowIndex, 14).setFormula(`=IF(E${rowIndex}<>0, ((M${rowIndex}-E${rowIndex})/E${rowIndex}), 0)`); // Total Potential Gain
+  sheet.getRange(rowIndex, 15).setFormula(`=IF(E${rowIndex}<>0, ((M${rowIndex}-H${rowIndex})/E${rowIndex}), 0)`); // Remaining Gain
+  sheet.getRange(rowIndex, 16).setFormula(`=M${rowIndex}*F${rowIndex}`); // Target Value = Target Price * Qty
+  sheet.getRange(rowIndex, 17).setValue(timeFrame); // Time Frame
+  sheet.getRange(rowIndex, 18).setValue(data['Account Owner'] || ''); // Account Owner
+  sheet.getRange(rowIndex, 19).setValue(exchange); // Exchange
+  sheet.getRange(rowIndex, 20).setValue(data.Status || 'Active'); // Status
+
+  return { message: 'Trading log updated successfully' };
+}
+
+function deleteTradingLog(rowIndex) {
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = spreadsheet.getSheetByName('TradingLog');
+
+  if (!sheet) {
+    return { error: 'TradingLog sheet not found' };
+  }
+
+  if (!rowIndex || rowIndex < 2) {
+    return { error: 'Invalid row index' };
+  }
+
+  sheet.deleteRow(rowIndex);
+  return { message: 'Trading log deleted successfully' };
+}
+
+function readExchanges() {
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = spreadsheet.getSheetByName('Exchange');
+
+  if (!sheet) {
+    return [];
+  }
+
+  const values = sheet.getDataRange().getValues();
+  // Skip header row
+  return values.slice(1).map(([id, name]) => ({
+    id,
+    name: name || ''
+  })).filter(item => item.name);
+}
+
+function readAccountOwners() {
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = spreadsheet.getSheetByName('AccountOwners');
+
+  if (!sheet) {
+    return [];
+  }
+
+  const values = sheet.getDataRange().getValues();
+  // Skip header row
+  return values.slice(1).map(([id, name]) => ({
+    id,
+    name: name || ''
+  })).filter(item => item.name);
+}
+
+function readStrategyNames() {
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = spreadsheet.getSheetByName('StrategyNames');
+
+  if (!sheet) {
+    return [];
+  }
+
+  const values = sheet.getDataRange().getValues();
+  // Skip header row
+  return values.slice(1).map(([id, name]) => ({
+    id,
+    name: name || ''
+  })).filter(item => item.name);
+}
+
+function readActiveTrades() {
+  // Get only active trades (Status = 'Active' or 'Partial') for profit booking dropdown
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = spreadsheet.getSheetByName('TradingLog');
+
+  if (!sheet) {
+    return { data: [], length: 0 };
+  }
+
+  const values = sheet.getDataRange().getValues();
+  if (values.length <= 1) {
+    return { data: [], length: 0 };
+  }
+
+  const headers = values[0];
+  const dataRows = values.slice(1).filter(row => row && row.length > 0 && row[2]); // Filter out empty rows and ensure Stock exists
+
+  const trades = dataRows.map((row, index) => {
+    const trade = {};
+    headers.forEach((header, colIndex) => {
+      trade[header] = row[colIndex];
+    });
+    trade.id = index + 2; // Row index (1-indexed, +1 for header)
+    return trade;
+  }).filter(trade => {
+    const status = trade.Status || 'Active';
+    return status === 'Active' || status === 'Partial';
+  });
+
+  return { data: trades, length: trades.length };
+}
+
+function createProfitBooking(data) {
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+
+  // Ensure ProfitBookings sheet exists
+  initializeTradingLogSheets();
+  const profitBookingsSheet = spreadsheet.getSheetByName('ProfitBookings');
+  const tradingLogSheet = spreadsheet.getSheetByName('TradingLog');
+
+  if (!profitBookingsSheet || !tradingLogSheet) {
+    return { error: 'Required sheets not found' };
+  }
+
+  // Get original trade details
+  const tradeRowIndex = data.tradeRowIndex;
+  if (!tradeRowIndex || tradeRowIndex < 2) {
+    return { error: 'Invalid trade row index' };
+  }
+
+  const tradeRow = tradingLogSheet.getRange(tradeRowIndex, 1, 1, tradingLogSheet.getLastColumn()).getValues()[0];
+  const headers = tradingLogSheet.getRange(1, 1, 1, tradingLogSheet.getLastColumn()).getValues()[0];
+
+  // Map trade row to object
+  const trade = {};
+  headers.forEach((header, index) => {
+    trade[header] = tradeRow[index];
+  });
+
+  const originalQty = parseFloat(trade.Qty) || 0;
+  const quantitySold = parseFloat(data['Quantity Sold']) || 0;
+  const sellPrice = parseFloat(data['Sell Price']) || 0;
+  const buyPrice = parseFloat(trade['Buy Price']) || 0;
+
+  // Validation
+  if (quantitySold <= 0) {
+    return { error: 'Quantity sold must be greater than 0' };
+  }
+  if (quantitySold > originalQty) {
+    return { error: 'Quantity sold cannot exceed original quantity' };
+  }
+
+  // Calculate profit booking fields
+  const sellDate = data['Sell Date'] instanceof Date
+    ? data['Sell Date']
+    : parseDateFromSheet(data['Sell Date']);
+  const buyDate = trade['Buy Date'] instanceof Date
+    ? trade['Buy Date']
+    : parseDateFromSheet(trade['Buy Date']);
+
+  const buyValue = buyPrice * quantitySold;
+  const sellValue = sellPrice * quantitySold;
+  const profitLossAmount = sellValue - buyValue;
+  const profitLossPercent = buyValue !== 0 ? (profitLossAmount / buyValue) * 100 : 0;
+  const holdingPeriod = Math.floor((sellDate - buyDate) / (1000 * 60 * 60 * 24)); // Days
+
+  // Get exchange currency from trade
+  const exchangeCurrency = (trade.Exchange || 'India').toLowerCase().trim();
+  let currency = 'INR';
+  if (exchangeCurrency === 'germany') {
+    currency = 'EUR';
+  } else if (exchangeCurrency === 'us') {
+    currency = 'USD';
+  }
+
+  // Base currency for reporting (default: INR)
+  const baseCurrency = data.baseCurrency || 'INR';
+
+  // Get exchange rates
+  const eurToInrRate = getCurrencyExchangeRate('EUR', 'INR');
+  const usdToInrRate = getCurrencyExchangeRate('USD', 'INR');
+  const eurToUsdRate = getCurrencyExchangeRate('EUR', 'USD');
+
+  // Convert amounts to base currency (INR)
+  const buyValueInr = convertCurrency(buyValue, currency, 'INR');
+  const sellValueInr = convertCurrency(sellValue, currency, 'INR');
+  const profitLossAmountInr = sellValueInr - buyValueInr;
+
+  // Create profit booking entry
+  const nextRow = profitBookingsSheet.getLastRow() + 1;
+  profitBookingsSheet.appendRow([
+    "=row()", // ID
+    tradeRowIndex, // Trade ID (reference to original trade)
+    trade.Stock || '', // Stock
+    sellDate, // Sell Date
+    sellPrice, // Sell Price
+    quantitySold, // Quantity Sold
+    buyPrice, // Buy Price
+    buyValue.toFixed(2), // Buy Value (original currency)
+    sellValue.toFixed(2), // Sell Value (original currency)
+    profitLossAmount.toFixed(2), // Profit/Loss Amount (original currency)
+    profitLossPercent.toFixed(2), // Profit/Loss %
+    holdingPeriod, // Holding Period
+    data.Notes || '', // Notes
+    trade['Account Owner'] || '', // Account Owner
+    trade.Exchange || '', // Exchange
+    baseCurrency, // Base Currency
+    eurToInrRate.toFixed(4), // EUR to INR Rate
+    usdToInrRate.toFixed(4), // USD to INR Rate
+    eurToUsdRate.toFixed(4), // EUR to USD Rate
+    buyValueInr.toFixed(2), // Buy Value (INR)
+    sellValueInr.toFixed(2), // Sell Value (INR)
+    profitLossAmountInr.toFixed(2) // Profit/Loss Amount (INR)
+  ]);
+
+  // Update original trade
+  const remainingQty = originalQty - quantitySold;
+  let newStatus;
+  if (remainingQty === 0) {
+    newStatus = 'Sold';
+  } else {
+    newStatus = 'Partial';
+  }
+
+  // Update quantity and status in original trade
+  tradingLogSheet.getRange(tradeRowIndex, 6).setValue(remainingQty); // Qty column (F = 6)
+  tradingLogSheet.getRange(tradeRowIndex, 20).setValue(newStatus); // Status column (T = 20)
+
+  // Recalculate Buy Value for remaining quantity
+  const newBuyValue = buyPrice * remainingQty;
+  tradingLogSheet.getRange(tradeRowIndex, 7).setFormula(`=E${tradeRowIndex}*F${tradeRowIndex}`); // Buy Value = Buy Price * Qty
+
+  // Recalculate other dependent fields
+  tradingLogSheet.getRange(tradeRowIndex, 9).setFormula(`=H${tradeRowIndex}*F${tradeRowIndex}`); // Current Value = CMP * Qty
+  tradingLogSheet.getRange(tradeRowIndex, 10).setFormula(`=I${tradeRowIndex}-G${tradeRowIndex}`); // Gain Amount = Current Value - Buy Value
+  tradingLogSheet.getRange(tradeRowIndex, 11).setFormula(`=IF(G${tradeRowIndex}<>0, (J${tradeRowIndex}/G${tradeRowIndex})*100, 0)`); // % Gain
+  tradingLogSheet.getRange(tradeRowIndex, 16).setFormula(`=M${tradeRowIndex}*F${tradeRowIndex}`); // Target Value = Target Price * Qty
+
+  return { message: 'Profit booking created successfully' };
+}
+
+function readProfitBookings() {
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = spreadsheet.getSheetByName('ProfitBookings');
+
+  if (!sheet) {
+    return { data: [], length: 0 };
+  }
+
+  const values = sheet.getDataRange().getValues();
+  if (values.length <= 1) {
+    return { data: [], length: 0 };
+  }
+
+  const headers = values[0];
+  const dataRows = values.slice(1).filter(row => row && row.length > 0 && row[2]); // Filter out empty rows and ensure Stock exists
+
+  const bookings = dataRows.map((row) => {
+    const booking = {};
+    headers.forEach((header, colIndex) => {
+      booking[header] = row[colIndex];
+    });
+    return booking;
+  });
+
+  return { data: bookings, length: bookings.length };
+}
+
+function readSingleProfitBooking(id) {
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = spreadsheet.getSheetByName('ProfitBookings');
+
+  if (!sheet) {
+    return { error: 'ProfitBookings sheet not found', data: null };
+  }
+
+  if (!id || id < 2) {
+    return { error: 'Invalid row index', data: null };
+  }
+
+  const lastRow = sheet.getLastRow();
+  if (id > lastRow) {
+    return { error: 'Row not found', data: null };
+  }
+
+  const lastColumn = sheet.getLastColumn();
+  const dataRange = sheet.getRange(id, 1, 1, lastColumn);
+  const values = dataRange.getValues();
+  return { data: values };
+}
+
+

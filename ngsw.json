@@ -1,6 +1,6 @@
 {
   "configVersion": 1,
-  "timestamp": 1786976360629,
+  "timestamp": 1787033023724,
   "index": "/josie-world/index.html",
   "assetGroups": [
     {
@@ -90,7 +90,7 @@
       "patterns": [
         "https:\\/\\/fonts\\.gstatic\\.com\\/.*"
       ],
-      "strategy": "cacheFirst",
+      "strategy": "performance",
       "maxSize": 20,
       "maxAge": 31536000000,
       "cacheQueryOptions": {
@@ -131,16 +131,16 @@
     "/josie-world/chunk-UoRRrDLC.js": "b21d3582fb535710edcb7d35d9a9ed34d0c8846e",
     "/josie-world/chunk-onukibZx.js": "0f2e66fbe52c86c578c427d329d2eab7f9e2eacb",
     "/josie-world/favicon.ico": "335cef29a190b0211283bdeffb2a71f70678222d",
-    "/josie-world/icons/icon-128x128.png": "ceec905d118655eab1f9240316370da3b2de4a32",
-    "/josie-world/icons/icon-144x144.png": "0e2f633252e1cde02e5dede68733157f9c0bb5b4",
-    "/josie-world/icons/icon-152x152.png": "5ed6450b556d6627fd0a064a8bcafebde57da29b",
-    "/josie-world/icons/icon-192x192.png": "bd7d93312cd73d59909d60e0eed7d0184b73c698",
-    "/josie-world/icons/icon-384x384.png": "b29afcc203879abcad41b64d38eb091aa6e0951d",
-    "/josie-world/icons/icon-512x512.png": "35102f9a28e9e34795181a17b74dea30ba815bdb",
-    "/josie-world/icons/icon-72x72.png": "cc6cbe9c423d3ddf307c81378d8b866994953801",
-    "/josie-world/icons/icon-96x96.png": "180e90d09f7c186091824dc992449eaf68c368cd",
-    "/josie-world/icons/icon-maskable-192x192.png": "f56c7478c96a2fcb0a8a3213a1474a7097256fa7",
-    "/josie-world/icons/icon-maskable-512x512.png": "4033603687adaeadcc1fc8e5fbfafbaa831a300c",
+    "/josie-world/icons/icon-128x128.png": "3661a1885895d57a2ab58d5bf5cbf4859b361de6",
+    "/josie-world/icons/icon-144x144.png": "2812f2ccd7353b592f837b6c55d3db3fcca62eb4",
+    "/josie-world/icons/icon-152x152.png": "f9ad40d8fca3d011248224c2e10fcf3c025b7767",
+    "/josie-world/icons/icon-192x192.png": "dbcfa88a7b188f40660eb355beb3c3244aeafd2e",
+    "/josie-world/icons/icon-384x384.png": "aed08cb3015a66f1cc088d720d81a0085764ed70",
+    "/josie-world/icons/icon-512x512.png": "eb3b3027a6420de60534755b1e68631d78448d44",
+    "/josie-world/icons/icon-72x72.png": "9bc2f5d5aee880c897081fe3d1a78cae9342d5ac",
+    "/josie-world/icons/icon-96x96.png": "ead61b37d531889513494845a8d122fb83947665",
+    "/josie-world/icons/icon-maskable-192x192.png": "dbcfa88a7b188f40660eb355beb3c3244aeafd2e",
+    "/josie-world/icons/icon-maskable-512x512.png": "eb3b3027a6420de60534755b1e68631d78448d44",
     "/josie-world/index.html": "7b9e9166b17e88871aa3f7cf3f0eb2b82a347ace",
     "/josie-world/main-34WKRJKK.js": "33c1297058461c271cf489aedc5a9069ad3a54f6",
     "/josie-world/manifest.webmanifest": "9299875468cf424b1cd8edce6f5f7d91699e7eec",
